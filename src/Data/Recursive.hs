@@ -39,6 +39,8 @@ module Data.Recursive
 -- $specialFolds
 , iso
 , trans
+, isoM
+, transM
 -- * Aliases
 -- $aliases
 , fold
@@ -53,12 +55,18 @@ module Data.Recursive
 , Cofree(..)
 ) where
 
+import Prelude (undefined)
+
 import Data.Foldable (Foldable)
 import Data.Function
 import Data.Functor
 import Data.Traversable
 import Control.Applicative
 import Control.Monad
+
+import Data.Bifunctor
+import Data.Bifoldable
+import Data.Bitraversable
 
 
 -- $typeClasses
@@ -92,6 +100,9 @@ class Functor (Base t) => Corecursive t where
 -- | The type constraint for isomorphic data types.
 --
 -- See `iso`.
+--
+-- > NOTE: It is a weak, directional isomorphism.
+-- > If `Iso a b` and `Iso b a` then it is a strong isomorphism.
 type Iso a b = (Recursive a, Corecursive b, Base a ~ Base b)
 
 -- class Recursive t => Indexed t where
@@ -117,7 +128,17 @@ ana = hylo embed
 hylo :: (Functor f) => (f b -> b) -> (a -> f a) -> a -> b
 hylo alg coalg = h where h = alg . fmap h . coalg
 
--- NOTE: There are no applicative variants for recursive
+-- NOTE: Applicatives are possible if we apply the fmap trick
+--  that we used in dihyloA, but they are trivial.
+hyloA :: (Traversable t, Applicative f) => (t b -> b) -> (a -> t a) -> a -> f b
+hyloA alg coalg = h where h = fmap alg . traverse h . coalg
+-- This works because traverse obviously encapsulates both the
+--  result of mapping and the final result in an applicative
+--  functor, and so we must `fmap alg` to make it sensible.
+-- Otherwise, we get this funky type where the cata is lifted
+--  from `t b -> b` to `f (t b) -> f b`, but not the ana.
+-- hyloX :: (Traversable t, Applicative f) => (f (t b) -> f b) -> (a -> t a) -> a -> f b
+-- hyloX alg coalg = h where h = alg . traverse h . coalg
 
 -- $monadicFolds
 -- Monadic variants of the basic folds
@@ -155,6 +176,14 @@ iso = hylo embed project
 -- An alias for `hoist`
 trans :: (Recursive s, Corecursive t) => (forall a. Base s a -> Base t a) -> s -> t
 trans f = hylo (embed . f) project
+
+-- Barely non-trivial
+isoM :: (Monad m, Iso s t, Traversable (Base s)) => s -> m t
+isoM = hyloM embedM projectM
+
+-- Non-trivial
+transM :: (Monad m, Recursive s, Corecursive t, Traversable (Base s)) => (forall a. Base s a -> m (Base t a)) -> s -> m t
+transM f = hyloM (embedM <=< f) projectM
 
 -- $aliases
 -- Aliases to match the existing standard nomenclature.

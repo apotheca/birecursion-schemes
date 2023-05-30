@@ -85,6 +85,10 @@ module Data.Direcursive
 -- $specialFolds
 , diiso
 , ditrans
+-- , diisoA
+-- , ditransA
+, diisoM
+, ditransM
 -- * Aliases
 -- $aliases
 , Base1
@@ -123,11 +127,13 @@ import Data.Recursive
 type family Dibase (t :: * -> *) :: * -> * -> *
 
 -- | The class of recursive functors that can be unfolded a single layer at a time.
+-- TODO: Add: Functor f, forall a . Recursive (f a), forall a . Corecursive (f a)
 class (Bifunctor (Dibase f)) => Direcursive f where
     -- | Unfold a single recursion layer.
     diproject :: f a -> Dibase f a (f a)
 
 -- | The class of co-recursive functors that can be folded up a single layer at a time.
+-- TODO: Add: Functor f, forall a . Recursive (f a), forall a . Corecursive (f a)
 class (Bifunctor (Dibase f)) => Codirecursive f where
     -- | Fold up a single recursion layer.
     diembed :: Dibase f a (f a) -> f a
@@ -249,7 +255,12 @@ diiso f = dihylo f diembed diproject
 ditrans :: (Direcursive s, Codirecursive t) => (a -> b) -> (forall c . Dibase s b c -> Dibase t b c) -> s a -> t b
 ditrans f g = dihylo f (diembed . g) diproject
 
--- $aliases
+diisoM :: (Monad m, Diiso s t, Bitraversable (Dibase s)) => (a -> m b) -> s a -> m (t b)
+diisoM f = dihyloM f diembedM diprojectM
+
+ditransM :: (Monad m, Direcursive s, Codirecursive t, Bitraversable (Dibase s)) => (a -> m b) -> (forall c . Dibase s b c -> m (Dibase t b c)) -> s a -> m (t b)
+ditransM f g = dihyloM f (diembedM <=< g) diprojectM
+
 -- $aliases
 -- Aliases to match the existing standard nomenclature.
 
@@ -299,14 +310,14 @@ data Difix f a = Difix { unDifix :: (f a (Difix f a)) }
 
 type instance Dibase (Difix f) = f
 
+instance (Bifunctor f) => Functor (Difix f) where
+    fmap = diiso
+
 instance (Bifunctor f) => Direcursive (Difix f) where
     diproject = unDifix
 
 instance (Bifunctor f) => Codirecursive (Difix f) where
     diembed = Difix
-
-instance (Bifunctor f) => Functor (Difix f) where
-    fmap = diiso
 
 -- Or Difree f ann b
 data Difree f a ann = Dipure ann | Difree (f a (Difree f a ann))

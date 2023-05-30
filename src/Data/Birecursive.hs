@@ -39,6 +39,8 @@ module Data.Birecursive
 -- $specialFolds
 , biiso
 , bitrans
+, biisoM
+, bitransM
 -- * Aliases
 -- $aliases
 , bifold
@@ -47,7 +49,7 @@ module Data.Birecursive
 , birefix
 , bihoist
 -- * Free Boolean Cube
--- $freeBooleanCube'
+-- $freeBooleanCube
 , Bifix(..)
 , Bifree(..)
 , Bicofree(..)
@@ -120,7 +122,8 @@ bianaM :: (Monad m, Bitraversable (Bibase b), Cobirecursive b) => (a -> m (Bibas
 bianaM = bihyloM biembedM
 -- | A monadic variant of `bihylo`
 bihyloM :: (Monad m, Bifunctor f, Bitraversable f) => (f b b -> m b) -> (a -> m (f a a)) -> a -> m b
-bihyloM alg coalg = h where h = alg <=< bimapM h h <=< coalg
+-- bihyloM alg coalg = h where h = alg <=< bimapM h h <=< coalg
+bihyloM alg coalg = h where h = alg <=< bitraverse h h <=< coalg
 
 -- $specialFolds
 
@@ -130,11 +133,26 @@ bihyloM alg coalg = h where h = alg <=< bimapM h h <=< coalg
 biiso :: (Biiso a b) => a -> b
 biiso = bihylo biembed biproject
 
--- | The bi- natural transformation function
+-- | The bi- natural transformation function / natural transformation of bifunctors
 --
 -- An alias for `bihoist`
 bitrans :: (Birecursive s, Cobirecursive t) => (forall a b. Bibase s a b -> Bibase t a b) -> s -> t
 bitrans f = bihylo (biembed . f) biproject
+
+-- | The natural bi-transformation of bifunctors
+-- bibitrans :: (Cobirecursive b, Birecursive a, Bifunctor f) => (f b b -> Bibase b b b) -> (Bibase a a a -> f a a) -> a -> b
+-- bibitrans f g = bihylo (biembed . f) (g . biproject)
+
+-- otherbibitrans :: (Bibase c ~ Bibase b, Cobirecursive b, Birecursive c) => (b -> b) -> (c -> c) -> c -> b
+-- otherbibitrans f g = h where h = biembed . bimap (f . h) (h . g) . biproject
+
+-- Barely non-trivial
+biisoM :: (Monad m, Biiso a b, Bitraversable (Bibase a)) => a -> m b
+biisoM = bihyloM biembedM biprojectM
+
+-- Non-trivial
+bitransM :: (Monad m, Birecursive s, Cobirecursive t, Bitraversable (Bibase s)) => (forall a b. Bibase s a b -> m (Bibase t a b)) -> s -> m t
+bitransM f = bihyloM (biembedM <=< f) biprojectM
 
 -- $aliases
 -- Aliases to match the existing standard nomenclature.

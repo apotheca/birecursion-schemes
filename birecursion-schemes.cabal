@@ -1,6 +1,6 @@
 cabal-version:  3.0
 name:           birecursion-schemes
-version:        0.0.1
+version:        0.0.2
 license:        NONE
 author:         Leo Dillinger
 maintainer:     leo@apotheca.io
@@ -21,18 +21,26 @@ flag no-recursion-schemes
 
 library
     exposed-modules:
-        Data.Recursive
-        Data.Direcursive
+        Data.Biindexed
+        Data.Bipathed
         Data.Birecursive
+        Data.Dipathed
+        Data.Direcursive
+        Data.Direcursive.List
+        Data.Indexed
+        Data.Pathed
+        Data.Recursive
     other-modules:
         Paths_birecursion_schemes
     default-extensions:
         ConstraintKinds
+        DefaultSignatures
         FlexibleContexts
         NoImplicitPrelude
         OverloadedStrings
         QuantifiedConstraints
         RankNTypes
+        TupleSections
         TypeFamilies
         TypeOperators
     build-depends:

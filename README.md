@@ -10,6 +10,8 @@ Please see the `haddock` docs for more detail.
 
 > WARNING: This library is experimental, and only includes the core concepts. It has been published so that the core concepts may be discussed.
 
+> TODO: Bring in more from `apotheca/canary/`, `apotheca/apotheca`, `Compendium.hs`, and other notes / stashes.
+
 ## Flags
 
 ### no-recursion-schemes
@@ -19,3 +21,13 @@ This library depends on `recursion-schemes`, but may be compiled without it usin
 ```haskell
 cabal repl birecursion-schemes -f no-recursion-schemes
 ```
+
+## Issues
+
+The following modules lack documentation:
+
+- Indexed
+- Pathed
+- Biindexed
+- Bipathed
+- Dipathed
