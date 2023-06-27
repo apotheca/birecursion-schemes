@@ -62,6 +62,7 @@ module Data.Direcursive
   Dibase
 , Direcursive(..)
 , Codirecursive(..)
+, Ditrans(..)
 , Diiso(..)
 , Difunctor(..)
 -- * Basic difolds
@@ -95,6 +96,7 @@ module Data.Direcursive
 , Recursive1
 , Corecursive1
 , Iso1
+, Trans1
 , Fix1
 , Free1
 , Cofree1
@@ -138,10 +140,14 @@ class (Bifunctor (Dibase f)) => Codirecursive f where
     -- | Fold up a single recursion layer.
     diembed :: Dibase f a (f a) -> f a
 
+type Ditrans a b = (Direcursive a, Codirecursive b)
+
 -- | The type constraint for isomorphic functors.
 --
 -- See `diiso`.
-type Diiso a b = (Direcursive a, Codirecursive b, Dibase a ~ Dibase b)
+type Diiso a b = (Ditrans a b, Dibase a ~ Dibase b)
+
+type Didis r = Diiso r r -- Ditrans r r -- (Direcursive r, Codirecursive r)
 
 -- | The class of recursive functors
 --
@@ -252,13 +258,13 @@ diiso f = dihylo f diembed diproject
 -- | The natural transformation mapping function
 --
 -- An alias for `hoistMap`
-ditrans :: (Direcursive s, Codirecursive t) => (a -> b) -> (forall c . Dibase s b c -> Dibase t b c) -> s a -> t b
+ditrans :: (Ditrans s t) => (a -> b) -> (forall c . Dibase s b c -> Dibase t b c) -> s a -> t b
 ditrans f g = dihylo f (diembed . g) diproject
 
 diisoM :: (Monad m, Diiso s t, Bitraversable (Dibase s)) => (a -> m b) -> s a -> m (t b)
 diisoM f = dihyloM f diembedM diprojectM
 
-ditransM :: (Monad m, Direcursive s, Codirecursive t, Bitraversable (Dibase s)) => (a -> m b) -> (forall c . Dibase s b c -> m (Dibase t b c)) -> s a -> m (t b)
+ditransM :: (Monad m, Ditrans s t, Bitraversable (Dibase s)) => (a -> m b) -> (forall c . Dibase s b c -> m (Dibase t b c)) -> s a -> m (t b)
 ditransM f g = dihyloM f (diembedM <=< g) diprojectM
 
 -- $aliases
@@ -268,6 +274,7 @@ type Base1 t        = Dibase t
 type Recursive1 f   = Direcursive f
 type Corecursive1 f = Codirecursive f
 type Iso1 f g       = Diiso f g
+type Trans1 f g     = Ditrans f g
 type Fix1 f         = Difix f
 type Free1 f a b    = Difree f a b
 type Cofree1 f a b  = Dicofree f a b
@@ -300,7 +307,7 @@ refixMap = diiso
 -- | Convert from one recursive functor to another, while mapping over the functor content.
 -- 
 -- An alias for `ditrans`
-hoistMap :: (Recursive1 s, Corecursive1 t) => (a -> b) -> (forall c . Base1 s b c -> Base1 t b c) -> s a -> t b
+hoistMap :: (Trans1 s t) => (a -> b) -> (forall c . Base1 s b c -> Base1 t b c) -> s a -> t b
 hoistMap = ditrans
 
 -- $freeBooleanCube

@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 module Data.Indexed where
 
 import Data.Function
@@ -25,13 +26,6 @@ class (Indexed f, Functor f) => IndexedFunctor f where
 
 imapDefault :: (Indexed f, Functor f) => (Index f -> a -> b) -> f a -> f b
 imapDefault f = fmap (uncurry f) . indexed
-
-imapWith
-    :: (IndexedFunctor f)
-    => (Index f -> path -> indexpath)
-    -> (indexpath -> a -> b)
-    -> path -> f a -> f b
-imapWith cons f p = imap (\ i -> f (cons i p))
     
 class (Indexed f, Foldable f) => IndexedFoldable f where
     ifoldMap :: (Monoid m) => (Index f -> a -> m) -> f a -> m 
@@ -40,8 +34,12 @@ class (Indexed f, Foldable f) => IndexedFoldable f where
 ifoldMapDefault :: (Indexed f, Foldable f, Monoid m) => (Index f -> a -> m) -> f a -> m
 ifoldMapDefault f = foldMap (uncurry f) . indexed
 
--- TODO: ifoldMapWith
-    
+-- TODO: pfoldMap et al
+
+-- TODO: sfoldMap et al
+
+-- TODO: This may be a more desirable hierarchy, despite Indexed being sufficient over IndexedFunctor + IndexedFoldable
+-- class (IndexedFunctor t, IndexedFoldable t, Traversable t) => IndexedTraversable t where
 class (Indexed t, Traversable t) => IndexedTraversable t where
     itraverse :: Applicative f => (Index t -> a -> f b) -> t a -> f (t b) 
     itraverse = itraverseDefault
@@ -49,9 +47,16 @@ class (Indexed t, Traversable t) => IndexedTraversable t where
 itraverseDefault :: (Indexed t, Traversable t, Applicative f) => (Index t -> a -> f b) -> t a -> f (t b) 
 itraverseDefault f = traverse (uncurry f) . indexed
 
-itraverseWith
-    :: (IndexedTraversable t, Applicative f)
-    => (Index t -> path -> indexpath)
-    -> (indexpath -> a -> f b)
-    -> path -> t a -> f (t b)
-itraverseWith cons f p = itraverse (\ i -> f (cons i p))
+-- NOTE: Defaults like:
+-- fmap (uncurry f) . indexed
+-- foldMap (uncurry f) . indexed
+-- traverse (uncurry f) . indexed
+-- Are only stricly equivalent to a properly implemented imap / ifoldMap / itraverse
+-- for the outer perspective of a non-recursive structure.
+-- For a recursive functor using folds, we want to operate over /the base functor/ and map in steps.
+-- Mapping over every object and *then* doing something with the container's structure is different
+-- from doing them seamlessly - remember that recursive objects embody both functor and fold,
+-- functor for mapping, and fold for order of operations on children.
+-- Operations need to be woven properly to satisfy the higher recursive functor constraint,
+-- so `imap` for a recursive functor has the additional constraint of both self and children being
+-- mapped / transformed in a specific order

@@ -22,6 +22,7 @@ module Data.Birecursive
   Bibase
 , Birecursive(biproject)
 , Cobirecursive(biembed)
+, Bitrans(..)
 , Biiso(..)
 -- * Basic bifolds
 -- $basicFolds
@@ -77,10 +78,14 @@ class (Bifunctor (Bibase t)) => Cobirecursive t where
     -- | Fold up a single recursion layer.
     biembed :: Bibase t t t -> t
 
+type Bitrans a b = (Birecursive a, Cobirecursive b)
+
 -- | The type constraint for bi- isomorphic data types.
 --
 -- See `biiso`.
-type Biiso a b = (Birecursive a, Cobirecursive b, Bibase a ~ Bibase b)
+type Biiso a b = (Bitrans a b, Bibase a ~ Bibase b)
+
+type Bidis r = Biiso r r -- Bitrans r r -- (Birecursive r, Cobirecursive r)
 
 -- $basicFolds
 -- The bi- variants of the basic folds
@@ -136,7 +141,7 @@ biiso = bihylo biembed biproject
 -- | The bi- natural transformation function / natural transformation of bifunctors
 --
 -- An alias for `bihoist`
-bitrans :: (Birecursive s, Cobirecursive t) => (forall a b. Bibase s a b -> Bibase t a b) -> s -> t
+bitrans :: (Bitrans s t) => (forall a b. Bibase s a b -> Bibase t a b) -> s -> t
 bitrans f = bihylo (biembed . f) biproject
 
 -- | The natural bi-transformation of bifunctors
@@ -151,7 +156,7 @@ biisoM :: (Monad m, Biiso a b, Bitraversable (Bibase a)) => a -> m b
 biisoM = bihyloM biembedM biprojectM
 
 -- Non-trivial
-bitransM :: (Monad m, Birecursive s, Cobirecursive t, Bitraversable (Bibase s)) => (forall a b. Bibase s a b -> m (Bibase t a b)) -> s -> m t
+bitransM :: (Monad m, Bitrans s t, Bitraversable (Bibase s)) => (forall a b. Bibase s a b -> m (Bibase t a b)) -> s -> m t
 bitransM f = bihyloM (biembedM <=< f) biprojectM
 
 -- $aliases
@@ -184,7 +189,7 @@ birefix = biiso
 -- | Convert from one birecursive type to another.
 -- 
 -- An alias for `bitrans`
-bihoist :: (Birecursive s, Cobirecursive t) => (forall a b. Bibase s a b -> Bibase t a b) -> s -> t
+bihoist :: (Bitrans s t) => (forall a b. Bibase s a b -> Bibase t a b) -> s -> t
 bihoist = bitrans
 
 -- $freeBooleanCube

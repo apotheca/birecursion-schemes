@@ -4,111 +4,180 @@ import Data.Bifunctor
 import Data.Function
 import Data.Functor
 import Data.Indexed
+import Data.Maybe
 import Data.Recursive
 import Data.Tuple
 
 import Control.Applicative
 import Control.Monad
 
+import Data.Sourced
+
 import Prelude (undefined, concat, concatMap, Foldable(..), print, IO(..), Show(..))
 
-type Path (r :: *) = [Index (Base r)]
+--
+-- Indexed morphisms
+--
 
-type PathedRecursive a = (Recursive a, IndexedFunctor (Base a))
-type PathedCorecursive a = (Corecursive a, IndexedFunctor (Base a))
-
-icata :: (Recursive a, IndexedFunctor (Base a)) => (Base a (Index (Base a), b) -> b) -> a -> b
--- icata alg = cata (alg . indexed)
+-- NOTE: You might as well use cata / hylo + (alg . indexed) but these are here for completion
+icata
+    :: (Recursive a, IndexedFunctor (Base a))
+    => (Base a (Index (Base a), b) -> b)
+    -> a -> b
 icata alg = ihylo alg project
-
--- iana :: (Corecursive b, IndexedFunctor (Base b)) => (a -> Base b a) -> a -> b
--- -- iana = hylo embed . fmap (fmap snd)
--- iana coalg = ihylo (embed . fmap snd) coalg
+-- Or: cata (alg . indexed)
 
 -- -- NOTE: curry (second h) = \ i a -> (i, h a)
-ihylo :: IndexedFunctor f => (f (Index f, b) -> b) -> (a -> f a) -> a -> b
--- ihylo alg = hylo (alg . indexed)
+ihylo
+    :: IndexedFunctor f
+    => (f (Index f, b) -> b)
+    -> (a -> f a)
+    -> a -> b
 ihylo alg coalg = h where h = alg . imap (curry (second h)) . coalg
+-- Or: hylo (alg . indexed)
 
-pcata :: (PathedRecursive a) => (Path a -> Base a b -> b) -> Path a -> a -> b
-pcata alg  = phylo alg (const project)
+-- NOTE: Compare to these -Maybe versions, which are a different way of performing
+--  the same thing
 
--- Frag / shard example
+icataMaybe
+    :: (IndexedFunctor (Base a), Recursive a)
+    => (Maybe (Index (Base a)) -> Base a b -> b)
+    -> a -> b
+icataMaybe alg = pcata (const . Just) alg Nothing
+
+ihyloMaybe
+    :: (IndexedFunctor (Base a), Recursive a)
+    => (Maybe (Index (Base a)) -> Base a b -> b)
+    -> (a -> Base a a)
+    -> a -> b
+ihyloMaybe alg coalg = phylo (const . Just) alg (const coalg) Nothing
+
+--
+-- Pathed mapping
+--
+
+pmap
+    :: (IndexedFunctor f)
+    => (Index f -> path -> path)     -- Cons
+    -> (path -> a -> b)
+    -> path                           -- Nil
+    -> f a -> f b
+pmap = smap
+
+ptraverse
+    :: (IndexedTraversable t, Applicative f)
+    => (Index t -> path -> path)
+    -> (path -> a -> f b)
+    -> path -> t a -> f (t b)
+ptraverse = straverse
+
+--
+-- Pathed morphisms
+--
+
+pcata
+    :: (IndexedFunctor (Base a), Recursive a)
+    => (Index (Base a) -> path -> path)
+    -> (path -> Base a b -> b)
+    -> path
+    -> a -> b
+pcata = scata id
+
+-- Frag / shard example 
 {-
+import Data.Map
+import Data.Ord
+
+type Path r = [Index (Base r)]
 type Frag r = Base r (Path r)
 type Shard r = (Path r, Frag r)
 
 shatterList :: (Recursive r, IndexedFunctor (Base r), Foldable (Base r)) => r -> [Shard r]
-shatterList r = snd $ pcata shatter [] r where
+shatterList r = snd $ pcata (:) shatter [] r where
     -- shatter :: Path r -> Base r (Path r, [Shard r]) -> (Path r, [Shard r])
     shatter p fs = (p, (p, fmap fst fs) : concatMap snd fs)
 
-shatterMap :: (Recursive r, IndexedFunctor (Base r), Foldable (Base r)) => r -> Map (Path r) (Frag r)
+shatterMap
+    :: (Recursive r, IndexedFunctor (Base r), Foldable (Base r), Ord (Index (Base r)))
+    => r -> Map (Path r) (Frag r)
 shatterMap = fromList . shatterList
 -}
 
-pana :: (PathedCorecursive b) => (Path b -> a -> Base b a) -> Path b -> a -> b
-pana coalg  = phylo (const embed) coalg
+pana
+    :: (IndexedFunctor (Base b), Corecursive b)
+    => (Index (Base b) -> path -> path)
+    -> (path -> a -> Base b a)
+    -> path
+    -> a -> b
+pana = sana id
 
--- p-hylo as in pathed-hylo
-phylo :: IndexedFunctor f => ([Index f] -> f b -> b) -> ([Index f] -> a -> f a) -> [Index f] -> a -> b
--- phylo alg coalg = h where h p = alg p . imap (\ i -> h (i : p)) . coalg p
-phylo alg coalg = h where h p = alg p . imapWith (:) h p . coalg p
+phylo
+    :: (IndexedFunctor f)
+    => (Index f -> path -> path)
+    -> (path -> f b -> b)
+    -> (path -> a -> f a)
+    -> path
+    -> a -> b
+phylo = shylo id
 
--- Non-trivial?
--- pcataA
---     :: (Applicative f, Recursive a, IndexedTraversable (Base a))
---     => (Path a -> Base a b -> b)
---     -> Path a -> a -> f b
--- pcataA alg = phyloA alg (const project)
+-- Trivial, piso = const iso
+piso
+    :: (Iso a b, IndexedFunctor (Base a))
+    => (Index (Base a) -> path -> path)
+    -> path
+    -> a -> b
+piso = siso id
 
--- -- Non-trivial?
--- panaA
---     :: (Applicative f, Corecursive b, IndexedTraversable (Base b))
---     => (Path b -> a -> Base b a)
---     -> Path b -> a -> f b
--- panaA coalg = phyloA (const embed) coalg
+-- NOTE: Inferring the type *will forget* the forall
+ptrans
+    :: (Trans s t, IndexedFunctor (Base s))
+    => (Index (Base s) -> path -> path)
+    -> (path -> forall a. Base s a -> Base t a) -- Should this forall be before 'path ->'?
+    -> path
+    -> s -> t
+ptrans = strans id
 
--- -- Non-trivial?
--- phyloA
---     :: (Applicative f, IndexedTraversable t)
---     => ([Index t] -> t b -> b)
---     -> ([Index t] -> a -> t a)
---     -> [Index t] -> a -> f b
--- phyloA alg coalg = h where
---     h p = fmap (alg p) . itraverse (\ i -> h (i : p)) . coalg p
+--
+-- Monadic pathed morphisms
+--
 
 pcataM
-    :: (PathedRecursive a, IndexedTraversable (Base a), Monad m)
-    => (Path a -> Base a b -> m b)
-    -> Path a -> a -> m b
-pcataM alg  = phyloM alg (const projectM)
+    :: (Monad m, IndexedTraversable (Base a), Recursive a)
+    => (Index (Base a) -> path -> path)
+    -> (path -> Base a b -> m b)
+    -> path
+    -> a -> m b
+pcataM = scataM id
 
 panaM
-    :: (PathedCorecursive b, IndexedTraversable (Base b), Monad m)
-    => (Path b -> a -> m (Base b a))
-    -> Path b -> a -> m b
-panaM coalg  = phyloM (const embedM) coalg
+    :: (Monad m, IndexedTraversable (Base b), Corecursive b)
+    => (Index (Base b) -> path -> path)
+    -> (path -> a -> m (Base b a))
+    -> path
+    -> a -> m b
+panaM = sanaM id
 
 phyloM
-    :: (Monad m, IndexedTraversable t)
-    => ([Index t] -> t b -> m b)
-    -> ([Index t] -> a -> m (t a))
-    -> [Index t] -> a -> m b
--- phyloM alg coalg = h where h p = alg p <=< itraverse (\ i -> h (i:p)) <=< coalg p
-phyloM alg coalg = h where h p = alg p <=< itraverseWith (:) h p <=< coalg p
+    :: (Monad m, IndexedTraversable f)
+    => (Index f -> path -> path)
+    -> (path -> f b -> m b)
+    -> (path -> a -> m (f a))
+    -> path
+    -> a -> m b
+phyloM = shyloM id
 
--- Trivial
-piso :: (Iso s t, IndexedFunctor (Base s)) => Path s -> s -> t
-piso = phylo (const embed) (const project)
+-- Trivial, pisoM = const isoM
+pisoM :: (Monad m, Iso a b, IndexedTraversable (Base b))
+    => (Index (Base a) -> path -> path)
+    -> path
+    -> a -> m b
+pisoM = sisoM id
 
--- Non-trivial
-ptrans :: (PathedRecursive s, Corecursive t) => (Path s -> forall a. Base s a -> Base t a) -> Path s -> s -> t
-ptrans f = phylo (\ p -> embed . f p) (const project)
-
--- Trivial because pisoM = const isoM
-pisoM :: (Monad m, Iso s t, IndexedTraversable (Base s)) => Path s -> s -> m t
-pisoM = phyloM (const embedM) (const projectM)
-
-ptransM :: (Monad m, PathedRecursive s, Corecursive t, IndexedTraversable (Base s)) => (Path s -> forall a. Base s a -> m (Base t a)) -> Path s -> s -> m t
-ptransM f = phyloM (\ p -> embedM <=< f p) (const projectM)
+-- NOTE: Inferring the type *will forget* the forall
+ptransM
+    :: (Monad m, Trans s t, IndexedTraversable (Base s))
+    => (Index (Base s) -> path -> path)
+    -> (path -> forall a . Base s a -> m (Base t a)) -- Should this forall be before 'path ->'?
+    -> path
+    -> s -> m t
+ptransM = stransM id

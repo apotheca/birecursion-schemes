@@ -22,6 +22,7 @@ module Data.Recursive
   Base
 , Recursive(project)
 , Corecursive(embed)
+, Trans(..)
 , Iso(..)
 -- * Basic folds
 -- $basicFolds
@@ -97,13 +98,17 @@ class Functor (Base t) => Corecursive t where
 -- Don't define Base, Recursive, Corecursive
 #endif
 
+type Trans a b = (Recursive a, Corecursive b)
+
 -- | The type constraint for isomorphic data types.
 --
 -- See `iso`.
 --
 -- > NOTE: It is a weak, directional isomorphism.
 -- > If `Iso a b` and `Iso b a` then it is a strong isomorphism.
-type Iso a b = (Recursive a, Corecursive b, Base a ~ Base b)
+type Iso a b = (Trans a b, Base a ~ Base b)
+
+type Dis r = Iso r r -- Trans r r -- (Recursive r, Corecursive r)
 
 -- class Recursive t => Indexed t where
 
@@ -174,7 +179,7 @@ iso = hylo embed project
 -- | The natural transformation function
 --
 -- An alias for `hoist`
-trans :: (Recursive s, Corecursive t) => (forall a. Base s a -> Base t a) -> s -> t
+trans :: (Trans s t) => (forall a. Base s a -> Base t a) -> s -> t
 trans f = hylo (embed . f) project
 
 -- Barely non-trivial
@@ -182,7 +187,7 @@ isoM :: (Monad m, Iso s t, Traversable (Base s)) => s -> m t
 isoM = hyloM embedM projectM
 
 -- Non-trivial
-transM :: (Monad m, Recursive s, Corecursive t, Traversable (Base s)) => (forall a. Base s a -> m (Base t a)) -> s -> m t
+transM :: (Monad m, Trans s t, Traversable (Base s)) => (forall a. Base s a -> m (Base t a)) -> s -> m t
 transM f = hyloM (embedM <=< f) projectM
 
 -- $aliases
@@ -215,7 +220,7 @@ refix = iso
 -- | Convert from one recursive type to another.
 -- 
 -- An alias for `trans`.
-hoist :: (Recursive s, Corecursive t) => (forall a. Base s a -> Base t a) -> s -> t
+hoist :: (Trans s t) => (forall a. Base s a -> Base t a) -> s -> t
 hoist = trans
 
 -- $freeBooleanCube

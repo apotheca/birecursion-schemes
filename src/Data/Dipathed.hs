@@ -11,132 +11,168 @@ import Data.Functor
 import Data.Pathed
 import Data.Recursive
 
+import Data.Sourced
+
 import Control.Applicative
 import Control.Monad
 
-type Diindex (r :: * -> *) = (FirstIndex (Dibase r), [SecondIndex (Dibase r)]) -- NOTE: Should be ~ Index (r a)
-type Dipath (r :: * -> *) = [SecondIndex (Dibase r)]                           -- NOTE: Should be ~ Path (r a)
+--
+-- Pathed dimorphisms
+--
 
--- NOTE: These constraints often end up adding little, due to incomplete hierarchy
---  Eg, `Direcursive t, BiindexedBitraversable (Dibase t)` is sufficient as compared
---  to `PathedDirecursive t, Bitraversable (Dibase t)` which isn't.
-type DipathedDirecursive t = (Direcursive t, BiindexedBifunctor (Dibase t))
-type DipathedCodirecursive t = (Codirecursive t, BiindexedBifunctor (Dibase t))
-
--- NOTE: We've dispensed with the i-variants for now
-
--- NOTE: Enforcing Functor, Recursive => Direcursive would allow for
---  enforcing (Index f ~ Diindex f, Path (f a) ~ Dipath f) implicitly
--- pdicata
---     :: (DipathedDirecursive f, Index f ~ Diindex f, Path (f a) ~ Dipath f)
---     => (Index f -> a -> b)
---     -> (Path (f a) -> Dibase f b d -> d)
---     -> Path (f a) -> f a -> d
 pdicata
-    :: (DipathedDirecursive f)
-    => (Diindex f -> a -> b)
-    -> (Dipath f -> Dibase f b d -> d)
-    -> Dipath f -> f a -> d
-pdicata f alg  = pdihylo f alg (const diproject)
+    :: (BiindexedBifunctor (Dibase f), Direcursive f)
+    => (FirstIndex (Dibase f) -> path -> index)
+    -> (SecondIndex (Dibase f) -> path -> path)
+    -> (index -> a -> b)
+    -> (path -> Dibase f b d -> d)
+    -> path
+    -> f a -> d
+pdicata = sdicata id
 
 pdiana
-    :: (DipathedCodirecursive f)
-    => (Diindex f -> a -> b)
-    -> (Dipath f -> c -> Dibase f a c)
-    -> Dipath f -> c -> f b
-pdiana f coalg  = pdihylo f (const diembed) coalg
+    :: (BiindexedBifunctor (Dibase f), Codirecursive f)
+    => (FirstIndex (Dibase f) -> path -> index)
+    -> (SecondIndex (Dibase f) -> path -> path)
+    -> (index -> a -> b)
+    -> (path -> c -> Dibase f a c)
+    -> path
+    -> c -> f b
+pdiana = sdiana id
 
-pdihylo 
-    :: BiindexedBifunctor f
-    => ((FirstIndex f, [SecondIndex f]) -> a -> b)
-    -> ([SecondIndex f] -> f b d -> d)
-    -> ([SecondIndex f] -> c -> f a c)
-    -> [SecondIndex f] -> c -> d
--- pdihylo f alg coalg = h where h p = alg p . ibimap (\ i -> f (i , p)) (\ j -> h (j : p)) . coalg p
-pdihylo f alg coalg = h where h p = alg p . ibimapWith (,) (:) f h p . coalg p
-
-pdicataA
-    :: (Applicative f, DipathedDirecursive t, BiindexedBitraversable (Dibase t))
-    => (Diindex t -> a -> f b)
-    -> (Dipath t -> Dibase t b c -> c)
-    -> Dipath t -> t a -> f c
-pdicataA f alg = pdihyloA f alg (const diproject)
-
-pdianaA
-    :: (Applicative f, DipathedCodirecursive t, BiindexedBitraversable (Dibase t))
-    => (Diindex t -> a -> f b)
-    -> (Dipath t -> c -> Dibase t a c)
-    -> Dipath t -> c -> f (t b)
-pdianaA f coalg = pdihyloA f (const diembed) coalg
-
-pdihyloA
-    :: (Applicative f, BiindexedBitraversable t)
-    => ((FirstIndex t, [SecondIndex t]) -> a -> f b)
-    -> ([SecondIndex t] -> t b d -> d)
-    -> ([SecondIndex t] -> c -> t a c)
-    -> [SecondIndex t] -> c -> f d
-pdihyloA f alg coalg = h where
-    h p = fmap (alg p) . ibitraverse (\ i -> f (i,p)) (\ j -> h (j : p)) . coalg p
-
-pdicataM
-    :: (Monad m, DipathedDirecursive f, BiindexedBitraversable (Dibase f))
-    => (Diindex f -> a -> m b)
-    -> (Dipath f -> Dibase f b d -> m d)
-    -> Dipath f -> f a -> m d
-pdicataM f alg  = pdihyloM f alg (const diprojectM)
-
-pdianaM 
-    :: (Monad m, DipathedCodirecursive f, BiindexedBitraversable (Dibase f))
-    => (Diindex f -> a -> m b)
-    -> (Dipath f -> c -> m (Dibase f a c))
-    -> Dipath f -> c -> m (f b)
-pdianaM f coalg  = pdihyloM f (const diembedM) coalg
-
-pdihyloM
-    :: (Monad m, BiindexedBitraversable f)
-    => ((FirstIndex f, [SecondIndex f]) -> a -> m b)
-    -> ([SecondIndex f] -> f b d -> m d)
-    -> ([SecondIndex f] -> c -> m (f a c))
-    -> [SecondIndex f] -> c -> m d
-pdihyloM f alg coalg = h where
-    -- h p = alg p <=< ibitraverse (\ i -> f (i,p)) (\ j -> h (j : p)) <=< coalg p
-    h p = alg p <=< ibitraverseWith (,) (:) f h p <=< coalg p
+pdihylo
+    :: (BiindexedBifunctor f)
+    => (FirstIndex f -> path -> index)  -- Cap
+    -> (SecondIndex f -> path -> path)  -- Cons
+    -> (index -> a -> b)
+    -> (path -> f b d -> d)
+    -> (path -> c -> f a c)
+    -> path                             -- Nil
+    -> c -> d
+pdihylo = sdihylo id
 
 pdiiso
     :: (Diiso s t, BiindexedBifunctor (Dibase s))
-    => (Diindex s -> a -> b)
-    -> Dipath s -> s a -> t b
-pdiiso f = pdihylo f (const diembed) (const diproject)
+    => (FirstIndex (Dibase s) -> path -> index)
+    -> (SecondIndex (Dibase s) -> path -> path)
+    -> (index -> a -> b)
+    -> path
+    -> s a -> t b
+pdiiso = sdiiso id
 
 pditrans
-    :: (DipathedDirecursive s, Codirecursive t)
-    => (Diindex s -> a -> b)
-    -> (forall c . Dipath s -> Dibase s b c -> Dibase t b c)
-    -> Dipath s -> s a -> t b
-pditrans f g = pdihylo f (\ p -> diembed . g p) (const diproject)
+    :: (Ditrans s t, BiindexedBifunctor (Dibase s))
+    => (FirstIndex (Dibase s) -> path -> index)
+    -> (SecondIndex (Dibase s) -> path -> path)
+    -> (index -> a -> b)
+    -> (path -> forall x y .  Dibase s x y -> Dibase t x y)
+    -> path -> s a -> t b
+pditrans = sditrans id
+
+--
+-- Applicative pathed dimorphisms
+--
+
+pdicataA
+    :: (Applicative f, Direcursive t, BiindexedBitraversable (Dibase t))
+    => (FirstIndex (Dibase t) -> path -> index)  -- Cap
+    -> (SecondIndex (Dibase t) -> path -> path)  -- Cons
+    -> (index -> a -> f b)
+    -> (path -> Dibase t b c -> c)
+    -> path
+    -> t a -> f c
+pdicataA = sdicataA id
+
+pdianaA
+    :: (Applicative f, Codirecursive t, BiindexedBitraversable (Dibase t))
+    => (FirstIndex (Dibase t) -> path -> index)  -- Cap
+    -> (SecondIndex (Dibase t) -> path -> path)  -- Cons
+    -> (index -> a -> f b)
+    -> (path -> c -> Dibase t a c)
+    -> path                                      -- Nil
+    -> c -> f (t b)
+pdianaA = sdianaA id
+
+pdihyloA
+    :: (Applicative f, BiindexedBitraversable t)
+    => (FirstIndex t -> path -> index)  -- Cap
+    -> (SecondIndex t -> path -> path)  -- Cons
+    -> (index -> a -> f b)
+    -> (path -> t b d -> d)
+    -> (path -> c -> t a c)
+    -> path                             -- Nil
+    -> c -> f d
+pdihyloA = sdihyloA id
 
 pdiisoA
     :: (Applicative f, Diiso s t, BiindexedBitraversable (Dibase s))
-    => (Diindex s -> a -> f b)
-    -> Dipath s -> s a -> f (t b)
-pdiisoA f = pdihyloA f (const diembed) (const diproject)
+    => (FirstIndex (Dibase s) -> path -> index)
+    -> (SecondIndex (Dibase s) -> path -> path)
+    -> (index -> a -> f b)
+    -> path
+    -> s a -> f (t b)
+pdiisoA = sdiisoA id
 
 pditransA
-    :: (Applicative f, DipathedDirecursive s, Codirecursive t, BiindexedBitraversable (Dibase s))
-    => (Diindex s -> a -> f b)
-    -> (forall c . Dipath s -> Dibase s b c -> Dibase t b c)
-    -> Dipath s -> s a -> f (t b)
-pditransA f g = pdihyloA f (\ p -> diembed . g p) (const diproject)
+    :: (Applicative f, Ditrans s t, BiindexedBitraversable (Dibase s))
+    => (FirstIndex (Dibase s) -> path -> index)
+    -> (SecondIndex (Dibase s) -> path -> path)
+    -> (index -> a -> f b)
+    -> (path -> forall x y . Dibase s x y -> Dibase t x y)
+    -> path
+    -> s a -> f (t b)
+pditransA = sditransA id
+
+--
+-- Monadic pathed dimorphisms
+--
+
+pdicataM
+    :: (Monad m, BiindexedBitraversable (Dibase f), Direcursive f)
+    => (FirstIndex (Dibase f) -> path -> index)
+    -> (SecondIndex (Dibase f) -> path -> path)
+    -> (index -> a -> m b)
+    -> (path -> Dibase f b d -> m d)
+    -> path
+    -> f a -> m d
+pdicataM = sdicataM id
+
+pdianaM
+    :: (Monad m, BiindexedBitraversable (Dibase f), Codirecursive f)
+    => (FirstIndex (Dibase f) -> path -> index)
+    -> (SecondIndex (Dibase f) -> path -> path)
+    -> (index -> a -> m b)
+    -> (path -> c -> m (Dibase f a c))
+    -> path
+    -> c -> m (f b)
+pdianaM = sdianaM id
+
+pdihyloM
+    :: (Monad m, BiindexedBitraversable f)
+    => (FirstIndex f -> path -> index)
+    -> (SecondIndex f -> path -> path)
+    -> (index -> a -> m b)
+    -> (path -> f b d -> m d)
+    -> (path -> c -> m (f a c))
+    -> path
+    -> c -> m d
+pdihyloM = sdihyloM id
 
 pdiisoM
-    :: (Monad m, Diiso s t, BiindexedBitraversable (Dibase s))
-    => (Diindex s -> a -> m b)
-    -> Dipath s -> s a -> m (t b)
-pdiisoM f = pdihyloM f (const diembedM) (const diprojectM)
+    :: (Monad m, Diiso s t, BiindexedBitraversable (Dibase s)) 
+    => (FirstIndex (Dibase s) -> path -> index)
+    -> (SecondIndex (Dibase s) -> path -> path)
+    -> (index -> a -> m b)
+    -> path
+    -> s a -> m (t b)
+pdiisoM = sdiisoM id
 
 pditransM
-    :: (Monad m, DipathedDirecursive s, Codirecursive t, BiindexedBitraversable (Dibase s))
-    => (Diindex s -> a -> m b)
-    -> (forall c . Dipath s -> Dibase s b c -> m (Dibase t b c))
-    -> Dipath s -> s a -> m (t b)
-pditransM f g = pdihyloM f (\ p -> diembedM <=< g p) (const diprojectM)
+    :: (Monad m, Ditrans s t, BiindexedBitraversable (Dibase s))
+    => (FirstIndex (Dibase s) -> path -> index)
+    -> (SecondIndex (Dibase s) -> path -> path)
+    -> (index -> a -> m b)
+    -> (path -> forall x y . Dibase s x y -> m (Dibase t x y))
+    -> path
+    -> s a -> m (t b)
+pditransM = sditransM id

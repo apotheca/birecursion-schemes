@@ -15,6 +15,11 @@ import Data.Tuple
 import Control.Applicative
 import Control.Monad
 
+-- type family FirstIndex (f :: * -> * -> *) :: *
+-- type family SecondIndex (f :: * -> * -> *) :: *
+
+-- type Biindex (f :: * -> * -> *) = Either (FirstIndex f) (SecondIndex f)
+
 type family FirstIndex (f :: * -> * -> *) :: *
 type family SecondIndex (f :: * -> * -> *) :: *
 
@@ -35,15 +40,6 @@ class (Biindexed f, Bifunctor f) => BiindexedBifunctor f where
 ibimapDefault :: (Biindexed f, Bifunctor f) => (FirstIndex f -> a -> b) -> (SecondIndex f -> c -> d) -> f a c -> f b d
 ibimapDefault f g = bimap (uncurry f) (uncurry g) . biindexed
 
-ibimapWith
-    :: (BiindexedBifunctor f)
-    => (FirstIndex f -> path -> findexpath)     -- Left Cons
-    -> (SecondIndex f -> path -> sindexpath)    -- Right Cons
-    -> (findexpath -> a -> b)
-    -> (sindexpath -> c -> d)
-    -> path -> f a c -> f b d
-ibimapWith icons jcons f g p = ibimap (\ i -> f (icons i p)) (\ j -> g (jcons j p))
-
 class (Biindexed f, Bifoldable f) => BiindexedBifoldable f where
     ibifoldMap :: (Monoid m) => (FirstIndex f -> a -> m) -> (SecondIndex f -> b -> m) -> f a b -> m
     ibifoldMap = ibifoldMapDefault
@@ -57,12 +53,3 @@ class (Biindexed t, Bitraversable t) => BiindexedBitraversable t where
 
 ibitraverseDefault :: (Biindexed t, Bitraversable t, Applicative f) => (FirstIndex t -> a -> f c) -> (SecondIndex t -> b -> f d) -> t a b -> f (t c d)
 ibitraverseDefault f g = bitraverse (uncurry f) (uncurry g) . biindexed
-
-ibitraverseWith
-    :: (Monad m, BiindexedBitraversable f)
-    => (FirstIndex f -> path -> findexpath)     -- Left Cons
-    -> (SecondIndex f -> path -> sindexpath)    -- Right Cons
-    -> (findexpath -> a -> m b)
-    -> (sindexpath -> c -> m d)
-    -> path -> f a c -> m (f b d)
-ibitraverseWith icons jcons f g p = ibitraverse (\ i -> f (icons i p)) (\ j -> g (jcons j p))
